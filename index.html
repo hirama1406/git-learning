@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shift Maker Pro Ver 24.0</title>
+    <title>Shift Maker Pro Ver 24.4</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React & ReactDOM -->
@@ -18,16 +18,32 @@
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .sticky-col { position: sticky; left: 0; background: white; z-index: 10; border-right: 2px solid #e2e8f0; }
+        
+        /* 名前カラムの固定と横書き強制（Ver 24.4） */
+        .sticky-name-col {
+            position: sticky;
+            left: 0;
+            z-index: 20;
+            background-color: white !important;
+            border-right: 2px solid #e2e8f0;
+            white-space: nowrap !important; /* 絶対に改行させない */
+            min-width: 160px; /* 役職ラベルも含めて余裕を持つ */
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+        }
+        th.sticky-name-col {
+            background-color: #f1f5f9 !important;
+            z-index: 30;
+        }
     </style>
 </head>
 <body class="bg-slate-50">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // --- SVGアイコン ---
+        // --- アイコン (SVG内蔵) ---
         const Icon = ({ name, size = 16, className = "" }) => {
             const paths = {
                 Calendar: <g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g>,
@@ -43,7 +59,6 @@
                 Flag: <g><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></g>,
                 LogIn: <g><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></g>,
                 FileSpreadsheet: <g><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></g>,
-                Upload: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></g>,
                 Briefcase: <g><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></g>
             };
             return (
@@ -53,7 +68,18 @@
             );
         };
 
-        // --- 定数 ---
+        // --- タブボタンコンポーネント ---
+        const TabButton = ({ id, label, icon, isActive, onClick }) => (
+            <button
+                onClick={() => onClick(id)}
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm whitespace-nowrap transition-all ${
+                isActive ? 'border-blue-600 text-blue-600 bg-blue-50 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+            >
+                <Icon name={icon} size={16} />{label}
+            </button>
+        );
+
         const ROLES = {
             MANAGER: { id: 'manager', label: '店長', color: 'bg-purple-100 text-purple-800', hexBg: '#f3e8ff', hexText: '#6b21a8', icon: 'Star' },
             VICE_MANAGER: { id: 'vice_manager', label: '副店長', color: 'bg-purple-50 text-purple-700', hexBg: '#faf5ff', hexText: '#7e22ce', icon: 'Star' },
@@ -68,24 +94,11 @@
         const HOLIDAYS_2025 = ['2025-01-01', '2025-01-13', '2025-02-11', '2025-02-23', '2025-02-24', '2025-03-20', '2025-04-29', '2025-05-03', '2025-05-04', '2025-05-05', '2025-05-06', '2025-07-21', '2025-08-11', '2025-09-15', '2025-09-23', '2025-10-13', '2025-11-03', '2025-11-23', '2025-11-24'];
         const FIXED_OFF_DAYS = 10; 
         const MAX_CONSECUTIVE_WORK = 5; 
-        const STORAGE_KEY = 'shift_maker_pro_v24_full';
+        const STORAGE_KEY = 'shift_maker_pro_v24_complete_v4';
 
-        // --- 子コンポーネント ---
-        const TabButton = ({ id, label, icon, isActive, onClick }) => (
-            <button
-                onClick={() => onClick(id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm whitespace-nowrap transition-all ${
-                isActive ? 'border-blue-600 text-blue-600 bg-blue-50 font-bold' : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-                <Icon name={icon} size={16} />{label}
-            </button>
-        );
-
-        // --- メインアプリ ---
         function App() {
             const [activeTab, setActiveTab] = useState('settings');
-            const [storeName, setStoreName] = useState('');
+            const [storeName, setStoreName] = useState('マイショップ');
             const [year, setYear] = useState(2025);
             const [month, setMonth] = useState(5);
             const [reqWeekday, setReqWeekday] = useState(2);
@@ -106,49 +119,43 @@
             const [newStaffRole, setNewStaffRole] = useState('crew');
             const [helpStores, setHelpStores] = useState([]); 
             const [newHelpStore, setNewHelpStore] = useState('');
-            
-            // イベント設定
-            const [storeEventTypes, setStoreEventTypes] = useState([{ id: 'sevt_default', name: 'イベント', color: 'bg-red-500 text-white', hexBg:'#ef4444', hexText:'#ffffff' }]);
+            const [storeEventTypes, setStoreEventTypes] = useState([{ id: 'sevt_default', name: 'イベント', color: 'bg-red-500 text-white', hexBg: '#ef4444' }]);
             const [newStoreEventName, setNewStoreEventName] = useState('');
             const [staffEventTypes, setStaffEventTypes] = useState([
-                { id: 'se_1', name: '会議', color: 'bg-indigo-200 text-indigo-800', hexBg: '#c7d2fe', hexText: '#3730a3' },
-                { id: 'se_2', name: '巡回', color: 'bg-emerald-200 text-emerald-800', hexBg: '#a7f3d0', hexText: '#065f46' },
+                { id: 'se_1', name: '会議', color: 'bg-indigo-200 text-indigo-800' },
+                { id: 'se_2', name: '研修', color: 'bg-emerald-200 text-emerald-800' },
             ]);
             const [newStaffEventName, setNewStaffEventName] = useState('');
-            
             const [dailyStoreEvents, setDailyStoreEvents] = useState({});
             const [requests, setRequests] = useState({});
             const [helpAssignments, setHelpAssignments] = useState({});
             const [schedule, setSchedule] = useState(null);
-            const [generationLog, setGenerationLog] = useState([]);
 
-            // データの自動保存
+            // ブラウザ保存
             useEffect(() => {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
-                    try { 
+                    try {
                         const p = JSON.parse(saved);
-                        if (p.storeName !== undefined) setStoreName(p.storeName);
-                        if (p.year) setYear(p.year); if (p.month) setMonth(p.month);
-                        if (p.reqWeekday) setReqWeekday(p.reqWeekday); if (p.reqWeekend) setReqWeekend(p.reqWeekend); if (p.reqEvent) setReqEvent(p.reqEvent);
-                        if (p.shiftMode) setShiftMode(p.shiftMode);
-                        if (p.closedWeekDays) setClosedWeekDays(p.closedWeekDays);
-                        if (p.specificClosedDays) setSpecificClosedDays(p.specificClosedDays);
-                        if (p.staffList) setStaffList(p.staffList);
-                        if (p.helpStores) setHelpStores(p.helpStores);
-                        if (p.storeEventTypes) setStoreEventTypes(p.storeEventTypes);
-                        if (p.staffEventTypes) setStaffEventTypes(p.staffEventTypes);
-                        if (p.dailyStoreEvents) setDailyStoreEvents(p.dailyStoreEvents);
-                        if (p.requests) setRequests(p.requests);
-                        if (p.helpAssignments) setHelpAssignments(p.helpAssignments);
+                        if(p.storeName) setStoreName(p.storeName);
+                        if(p.year) setYear(p.year); if(p.month) setMonth(p.month);
+                        if(p.staffList) setStaffList(p.staffList);
+                        if(p.requests) setRequests(p.requests);
+                        if(p.dailyStoreEvents) setDailyStoreEvents(p.dailyStoreEvents);
+                        if(p.helpStores) setHelpStores(p.helpStores);
+                        if(p.helpAssignments) setHelpAssignments(p.helpAssignments);
+                        if(p.closedWeekDays) setClosedWeekDays(p.closedWeekDays);
+                        if(p.specificClosedDays) setSpecificClosedDays(p.specificClosedDays);
                     } catch (e) { console.error(e); }
                 }
             }, []);
 
-            const getExportData = () => ({ storeName, year, month, reqWeekday, reqWeekend, reqEvent, shiftMode, closedWeekDays, specificClosedDays, staffList, helpStores, storeEventTypes, staffEventTypes, dailyStoreEvents, requests, helpAssignments });
-            const saveToLocal = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(getExportData()));
+            const saveLocal = () => {
+                const data = { storeName, year, month, reqWeekday, reqWeekend, reqEvent, shiftMode, closedWeekDays, specificClosedDays, staffList, helpStores, storeEventTypes, staffEventTypes, dailyStoreEvents, requests, helpAssignments };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+                alert("ブラウザに保存しました。");
+            };
 
-            // 日付ヘルパー
             const daysInMonth = new Date(year, month, 0).getDate();
             const dateList = Array.from({ length: daysInMonth }, (_, i) => i + 1);
             const getDateKey = (d) => `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -158,178 +165,45 @@
             const isHoliday = (d) => HOLIDAYS_2025.includes(getDateKey(d));
             const isClosed = (d) => specificClosedDays.includes(getDateKey(d)) || closedWeekDays.includes(getWeekDayIndex(d));
             const isEventDay = (d) => !!dailyStoreEvents[getDateKey(d)];
-            const getRequiredNum = (d) => isEventDay(d) ? reqEvent : (isWeekend(d) || isHoliday(d) ? reqWeekend : reqWeekday);
+            const getRequiredNum = (d) => isEventDay(d) ? reqEvent : (isWeekend(d) ? reqWeekend : reqWeekday);
 
-            // 操作系
-            const addStaff = () => { if (newStaffName) { setStaffList([...staffList, { id: Date.now(), name: newStaffName, role: newStaffRole }]); setNewStaffName(''); }};
-            const addHelpStore = () => { if (newHelpStore && !helpStores.includes(newHelpStore)) { setHelpStores([...helpStores, newHelpStore]); setNewHelpStore(''); }};
-            const addStoreEvent = () => { if (newStoreEventName) { setStoreEventTypes([...storeEventTypes, { id: `sevt_${Date.now()}`, name: newStoreEventName, color: 'bg-red-500 text-white' }]); setNewStoreEventName(''); }};
-            const addStaffEvent = () => { if (newStaffEventName) { setStaffEventTypes([...staffEventTypes, { id: `stevt_${Date.now()}`, name: newStaffEventName, color: 'bg-indigo-200 text-indigo-800' }]); setNewStaffEventName(''); }};
-
-            const toggleClosedWeekDay = (i) => {
-                setClosedWeekDays(closedWeekDays.includes(i) ? closedWeekDays.filter(x => x !== i) : [...closedWeekDays, i]);
-            };
-            const toggleSpecificClosedDay = (d) => {
-                const k = getDateKey(d);
-                setSpecificClosedDays(specificClosedDays.includes(k) ? specificClosedDays.filter(x => x !== k) : [...specificClosedDays, k]);
-            };
-
-            const toggleDailyStoreEvent = (d) => {
-                const key = getDateKey(d);
-                if (!dailyStoreEvents[key]) setDailyStoreEvents({ ...dailyStoreEvents, [key]: storeEventTypes[0].id });
-                else {
-                    const idx = storeEventTypes.findIndex(e => e.id === dailyStoreEvents[key]);
-                    if (idx < storeEventTypes.length - 1) setDailyStoreEvents({ ...dailyStoreEvents, [key]: storeEventTypes[idx+1].id });
-                    else { const next = { ...dailyStoreEvents }; delete next[key]; setDailyStoreEvents(next); }
-                }
-            };
-
-            const handleRequestChange = (staffId, d, role) => {
-                const key = `${staffId}_${getDateKey(d)}`;
-                const cur = requests[key];
-                if (role === 'help_guest' || role === 'event') {
-                    const mark = role === 'event' ? 'event_in' : 'guest_in';
-                    setRequests({ ...requests, [key]: cur === mark ? undefined : mark });
-                } else {
-                    if (!cur) setRequests({ ...requests, [key]: 'off' });
-                    else if (cur === 'off') setRequests({ ...requests, [key]: 'paid' });
-                    else {
-                        const idx = staffEventTypes.findIndex(e => e.id === cur);
-                        if (idx < staffEventTypes.length - 1) setRequests({ ...requests, [key]: staffEventTypes[idx+1].id });
-                        else { const next = { ...requests }; delete next[key]; setRequests(next); }
-                    }
-                }
-            };
-
-            const handleHelpAssign = (staffId, d, store) => {
-                const key = `${staffId}_${getDateKey(d)}`;
-                if (!store) { const next = { ...helpAssignments }; delete next[key]; setHelpAssignments(next); }
-                else setHelpAssignments({ ...helpAssignments, [key]: store });
-            };
-
-            // シフト生成ロジック (ご提示いただいた高度なチケット制 & 責任者優先 & 5連勤制限)
+            // シフト作成
             const generateShift = () => {
                 let newSchedule = {};
-                let logs = [];
-                const hasResponsible = staffList.some(s => ['manager', 'vice_manager'].includes(s.role));
-                const staffStats = staffList.map(s => {
-                    const isFullTime = !['help_guest', 'event'].includes(s.role);
-                    return { ...s, isFullTime, tokens: isFullTime ? daysInMonth - FIXED_OFF_DAYS : 0, offCount: 0, consecutiveWork: 0 };
-                });
-
-                // 1. 固定・休みの反映
+                const stats = staffList.map(s => ({ ...s, tokens: !['help_guest', 'event'].includes(s.role) ? daysInMonth - FIXED_OFF_DAYS : 0, cons: 0 }));
+                
                 for (let d = 1; d <= daysInMonth; d++) {
-                    const dateKey = getDateKey(d);
-                    const dayClosed = isClosed(d);
-                    staffStats.forEach(s => {
-                        const key = `${s.id}_${dateKey}`;
-                        const req = requests[key];
-                        const help = helpAssignments[key];
-
-                        if (dayClosed) { newSchedule[key] = '定休'; s.offCount++; }
-                        else if (help) { newSchedule[key] = help; s.tokens--; }
-                        else if (req === 'off') { newSchedule[key] = '希望'; s.offCount++; s.tokens--; }
-                        else if (req === 'paid') { newSchedule[key] = '有給'; s.offCount++; s.tokens--; }
-                        else if (staffEventTypes.some(e => e.id === req)) {
-                            newSchedule[key] = staffEventTypes.find(e => e.id === req).name;
-                            s.tokens--;
-                        }
-                        else if (!s.isFullTime) {
-                            const mark = s.role === 'event' ? 'event_in' : 'guest_in';
-                            if (req !== mark) { newSchedule[key] = '-'; s.offCount++; }
+                    const k = getDateKey(d);
+                    if (isClosed(d)) { stats.forEach(s => s.cons = 0); continue; }
+                    const target = getRequiredNum(d);
+                    let assigned = 0;
+                    let candidates = [...stats].sort((a, b) => b.tokens - a.tokens + (Math.random() - 0.5));
+                    
+                    candidates.forEach(s => {
+                        const rk = `${s.id}_${k}`;
+                        if (requests[rk] === 'off') { newSchedule[rk] = '希望'; s.cons = 0; }
+                        else if (requests[rk] === 'paid') { newSchedule[rk] = '有給'; s.cons = 0; }
+                        else if (assigned < target && s.cons < MAX_CONSECUTIVE_WORK) {
+                            newSchedule[rk] = shiftMode === 'complex' ? (assigned % 2 === 0 ? '早' : '遅') : 'フル';
+                            s.tokens--; s.cons++; assigned++;
+                        } else {
+                            newSchedule[rk] = '公休'; s.cons = 0;
                         }
                     });
                 }
-
-                // 2. 日ごとの割り当て
-                for (let d = 1; d <= daysInMonth; d++) {
-                    const dateKey = getDateKey(d);
-                    if (isClosed(d)) { staffStats.forEach(s => s.consecutiveWork = 0); continue; }
-                    
-                    const targetNum = getRequiredNum(d);
-                    let assigned = staffStats.filter(s => !s.isFullTime && !newSchedule[`${s.id}_${dateKey}`]);
-                    let candidates = staffStats.filter(s => !newSchedule[`${s.id}_${dateKey}`] && s.isFullTime);
-
-                    // 連勤制限
-                    candidates = candidates.filter(s => {
-                        if (s.consecutiveWork >= MAX_CONSECUTIVE_WORK) {
-                            newSchedule[`${s.id}_${dateKey}`] = '公休'; s.offCount++; s.consecutiveWork = 0; return false;
-                        }
-                        return true;
-                    });
-
-                    // 責任者確保
-                    if (!assigned.some(s => ['manager', 'vice_manager'].includes(s.role)) && hasResponsible) {
-                        let mgrs = candidates.filter(s => ['manager', 'vice_manager'].includes(s.role));
-                        if (mgrs.length > 0) {
-                            mgrs.sort((a, b) => b.tokens - a.tokens + (Math.random() - 0.5));
-                            const picked = mgrs[0];
-                            assigned.push(picked);
-                            candidates = candidates.filter(c => c.id !== picked.id);
-                        }
-                    }
-
-                    // 残り枠を埋める
-                    candidates.sort((a, b) => b.tokens - a.tokens + (Math.random() - 0.5));
-                    while (assigned.length < targetNum && candidates.length > 0) {
-                        assigned.push(candidates.shift());
-                    }
-
-                    // 確定
-                    assigned.forEach((s, idx) => {
-                        const k = `${s.id}_${dateKey}`;
-                        if (!newSchedule[k]) {
-                            newSchedule[k] = shiftMode === 'complex' ? (idx % 2 === 0 ? '早' : '遅') : 'フル';
-                            s.tokens--; s.consecutiveWork++;
-                        }
-                    });
-                    
-                    // 選ばれなかったフルタイムは公休
-                    staffStats.forEach(s => {
-                        if (!newSchedule[`${s.id}_${dateKey}`]) { newSchedule[`${s.id}_${dateKey}`] = '公休'; s.offCount++; s.consecutiveWork = 0; }
-                    });
-                }
-                setSchedule(newSchedule); setActiveTab('result'); saveToLocal();
-            };
-
-            const handleExcelExport = () => {
-                if (!schedule) return;
-                let html = `<table border="1"><thead><tr><th>名前</th><th>役職</th>`;
-                dateList.forEach(d => html += `<th>${d}</th>`);
-                html += `<th>休日計</th></tr></thead><tbody>`;
-                staffList.forEach(s => {
-                    let offCount = 0;
-                    html += `<tr><td>${s.name}</td><td>${ROLES[s.role.toUpperCase()]?.label}</td>`;
-                    dateList.forEach(d => {
-                        const v = schedule[`${s.id}_${getDateKey(d)}`] || '';
-                        html += `<td>${v}</td>`;
-                        if (['公休','希望','有給','定休'].includes(v)) offCount++;
-                    });
-                    html += `<td>${offCount}</td></tr>`;
-                });
-                html += `</tbody></table>`;
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel' }));
-                link.download = `shift_${year}_${month}.xls`;
-                link.click();
+                setSchedule(newSchedule); setActiveTab('result'); saveLocal();
             };
 
             return (
-                <div className="max-w-6xl mx-auto md:my-6 bg-white shadow-2xl rounded-2xl overflow-hidden min-h-[800px]">
+                <div className="max-w-6xl mx-auto md:my-6 bg-white shadow-2xl rounded-2xl overflow-hidden min-h-[850px]">
                     {/* Header */}
-                    <div className="bg-slate-800 p-5 text-white flex justify-between items-center">
-                        <div>
-                            <h1 className="text-xl font-bold flex items-center gap-2"><Icon name="RefreshCw" className="text-blue-400"/> Shift Maker Pro Ver 24.0</h1>
-                            <p className="text-slate-400 text-xs mt-1">{storeName || '店舗名未設定'} | {year}年{month}月</p>
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => { saveToLocal(); alert('ブラウザに保存しました'); }} className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded text-xs flex items-center gap-2"><Icon name="Download"/> 保存</button>
-                            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="bg-red-900/50 hover:bg-red-900 px-3 py-2 rounded text-xs">初期化</button>
-                        </div>
+                    <div className="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
+                        <h1 className="text-xl font-bold flex items-center gap-2"><Icon name="RefreshCw" className="text-blue-400"/> Shift Maker Pro Ver 24.4</h1>
+                        <button onClick={saveLocal} className="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded text-xs font-bold transition-all">ブラウザに保存</button>
                     </div>
 
                     {/* Navigation */}
-                    <div className="flex border-b overflow-x-auto bg-white sticky top-0 z-20 shadow-sm">
+                    <div className="flex border-b overflow-x-auto bg-white sticky top-0 z-30 shadow-sm">
                         <TabButton id="settings" label="基本設定" icon="Settings" isActive={activeTab === 'settings'} onClick={setActiveTab} />
                         <TabButton id="staff" label="スタッフ" icon="Users" isActive={activeTab === 'staff'} onClick={setActiveTab} />
                         <TabButton id="help" label="他店ヘルプ" icon="Truck" isActive={activeTab === 'help'} onClick={setActiveTab} />
@@ -338,64 +212,80 @@
                     </div>
 
                     <div className="p-6">
-                        {/* 1. Settings */}
+                        {/* 1. Basic Settings */}
                         {activeTab === 'settings' && (
-                            <div className="grid md:grid-cols-2 gap-8 animate-fadeIn">
+                            <div className="animate-fadeIn grid md:grid-cols-2 gap-8">
                                 <div className="space-y-6">
-                                    <div className="bg-slate-50 p-5 rounded-xl border">
-                                        <h3 className="font-bold mb-4 flex items-center gap-2"><Icon name="Settings" className="text-blue-600"/> 基本設定</h3>
+                                    <div className="bg-slate-50 p-5 rounded-2xl border shadow-sm">
+                                        <h3 className="font-bold text-slate-700 mb-4 border-l-4 border-blue-500 pl-2 text-sm">基本情報</h3>
                                         <div className="space-y-4">
-                                            <div><label className="text-xs font-bold text-slate-500">店舗名</label><input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} className="w-full border p-2 rounded mt-1 outline-none"/></div>
+                                            <div><label className="text-xs font-bold text-slate-500">店舗名</label><input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} className="w-full border p-2 rounded mt-1 outline-none focus:ring-2 focus:ring-blue-500"/></div>
                                             <div className="flex gap-4">
                                                 <div className="flex-1"><label className="text-xs font-bold text-slate-500">年</label><input type="number" value={year} onChange={e => setYear(Number(e.target.value))} className="w-full border p-2 rounded mt-1"/></div>
                                                 <div className="flex-1"><label className="text-xs font-bold text-slate-500">月</label><select value={month} onChange={e => setMonth(Number(e.target.value))} className="w-full border p-2 rounded mt-1">{[...Array(12)].map((_, i) => <option key={i+1} value={i+1}>{i+1}月</option>)}</select></div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <div className="text-center"><label className="text-[10px] font-bold">平日数</label><input type="number" value={reqWeekday} onChange={e => setReqWeekday(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center"/></div>
-                                                <div className="text-center"><label className="text-[10px] font-bold text-orange-600">土日数</label><input type="number" value={reqWeekend} onChange={e => setReqWeekend(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center"/></div>
-                                                <div className="text-center"><label className="text-[10px] font-bold text-red-600">イベント</label><input type="number" value={reqEvent} onChange={e => setReqEvent(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center"/></div>
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-500 mb-1 block">シフト種別</label>
+                                                <div className="flex bg-white p-1 rounded border gap-1">
+                                                    <button onClick={() => setShiftMode('complex')} className={`flex-1 py-1 text-xs rounded transition-all ${shiftMode === 'complex' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'}`}>早/遅/フル</button>
+                                                    <button onClick={() => setShiftMode('simple')} className={`flex-1 py-1 text-xs rounded transition-all ${shiftMode === 'simple' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400'}`}>フルのみ</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-red-50 p-5 rounded-xl border border-red-100">
-                                        <h3 className="font-bold text-red-800 mb-3 text-sm">曜日定休設定</h3>
-                                        <div className="flex gap-2 justify-between">
-                                            {WEEKDAYS.map((w, i) => (
-                                                <button key={i} onClick={() => toggleClosedWeekDay(i)} className={`w-10 h-10 rounded-full font-bold text-xs border transition-all ${closedWeekDays.includes(i) ? 'bg-red-500 text-white shadow-lg' : 'bg-white text-slate-400'}`}>{w}</button>
-                                            ))}
+                                    <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 shadow-sm">
+                                        <h3 className="font-bold text-blue-800 mb-4 flex items-center gap-2 text-sm"><Icon name="Users"/> 必要人数設定</h3>
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="text-center"><label className="text-[10px] font-bold">平日</label><input type="number" value={reqWeekday} onChange={e => setReqWeekday(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center font-bold"/></div>
+                                            <div className="text-center"><label className="text-[10px] font-bold text-orange-600">土日祝</label><input type="number" value={reqWeekend} onChange={e => setReqWeekend(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center font-bold bg-orange-50"/></div>
+                                            <div className="text-center"><label className="text-[10px] font-bold text-red-600">イベント</label><input type="number" value={reqEvent} onChange={e => setReqEvent(Number(e.target.value))} className="w-full border p-2 rounded mt-1 text-center font-bold bg-red-50"/></div>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="bg-white p-5 rounded-xl border shadow-inner">
-                                    <h3 className="font-bold text-slate-700 mb-4 text-sm flex justify-between items-center">特定日の定休設定 <span className="text-[10px] font-normal text-slate-400">日付クリックで切替</span></h3>
-                                    <div className="grid grid-cols-7 gap-1">
-                                        {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold py-2 bg-slate-100">{w}</div>)}
-                                        {dateList.map(d => (
-                                            <button key={d} onClick={() => toggleSpecificClosedDay(d)} className={`h-12 text-sm border rounded-lg transition-all ${isClosed(d) ? 'bg-red-500 text-white font-bold' : 'bg-white hover:bg-red-50'}`}>{d}</button>
-                                        ))}
+                                <div className="space-y-6">
+                                    <div className="bg-red-50 p-5 rounded-2xl border border-red-100 shadow-sm">
+                                        <h3 className="font-bold text-red-800 mb-4 flex items-center gap-2 text-sm"><Icon name="Calendar"/> 曜日定休設定</h3>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {WEEKDAYS.map((w, i) => (
+                                                <button key={i} onClick={() => setClosedWeekDays(closedWeekDays.includes(i) ? closedWeekDays.filter(x => x!==i) : [...closedWeekDays, i])} className={`w-10 h-10 rounded-full font-bold transition-all border ${closedWeekDays.includes(i) ? 'bg-red-500 text-white border-red-600' : 'bg-white text-slate-400'}`}>{w}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-5 rounded-2xl border shadow-sm">
+                                        <h3 className="font-bold text-slate-700 mb-4 text-sm">特定日の定休設定（カレンダー選択）</h3>
+                                        <div className="grid grid-cols-7 gap-1">
+                                            {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold py-1 bg-slate-100">{w}</div>)}
+                                            {dateList.map(d => {
+                                                const key = getDateKey(d);
+                                                const closed = isClosed(d);
+                                                return (
+                                                    <button key={d} onClick={() => setSpecificClosedDays(specificClosedDays.includes(key) ? specificClosedDays.filter(k => k!==key) : [...specificClosedDays, key])} className={`h-10 text-xs border rounded transition-all ${closed ? 'bg-red-500 text-white font-bold border-red-600' : 'hover:bg-blue-50'}`}>{d}</button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         )}
 
-                        {/* 2. Staff */}
+                        {/* 2. Staff Management */}
                         {activeTab === 'staff' && (
-                            <div className="space-y-6 animate-fadeIn">
-                                <div className="bg-slate-800 p-5 rounded-xl flex flex-wrap gap-4 items-end">
-                                    <div className="flex-1 min-w-[200px]"><label className="text-xs text-slate-400">スタッフ氏名</label><input type="text" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full bg-slate-700 text-white p-3 rounded mt-1 border-none focus:ring-2 focus:ring-blue-500" placeholder="名前を入力"/></div>
-                                    <div className="w-48"><label className="text-xs text-slate-400">役職</label><select value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)} className="w-full bg-slate-700 text-white p-3 rounded mt-1">{Object.values(ROLES).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></div>
-                                    <button onClick={addStaff} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold">追加</button>
+                            <div className="animate-fadeIn space-y-6">
+                                <div className="bg-slate-800 p-5 rounded-2xl flex flex-wrap gap-4 items-end shadow-xl">
+                                    <div className="flex-1 min-w-[200px]"><label className="text-xs text-slate-400 font-bold">新規スタッフ氏名</label><input type="text" value={newStaffName} onChange={e => setNewStaffName(e.target.value)} className="w-full bg-slate-700 text-white p-3 rounded mt-1 border border-slate-600" placeholder="名前を入力"/></div>
+                                    <div className="w-48"><label className="text-xs text-slate-400 font-bold">役職</label><select value={newStaffRole} onChange={e => setNewStaffRole(e.target.value)} className="w-full bg-slate-700 text-white p-3 rounded mt-1 border border-slate-600">{Object.values(ROLES).map(r => <option key={r.id} value={r.id}>{r.label}</option>)}</select></div>
+                                    <button onClick={() => { if(newStaffName) { setStaffList([...staffList, {id: Date.now(), name: newStaffName, role: newStaffRole}]); setNewStaffName(''); } }} className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold transition-all">追加</button>
                                 </div>
                                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {staffList.map(s => {
                                         const r = ROLES[s.role.toUpperCase()] || ROLES.CREW;
                                         return (
-                                            <div key={s.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm">
+                                            <div key={s.id} className="flex items-center justify-between p-4 bg-white border rounded-xl shadow-sm hover:shadow-md group">
                                                 <div className="flex items-center gap-3">
                                                     <div className={`p-2 rounded-full ${r.color}`}><Icon name={r.icon} size={20}/></div>
-                                                    <div><p className="font-bold">{s.name}</p><p className="text-[10px] text-slate-400 tracking-widest">{r.label}</p></div>
+                                                    <div><p className="font-bold">{s.name}</p><p className="text-[10px] text-slate-400 font-bold tracking-widest">{r.label}</p></div>
                                                 </div>
-                                                <button onClick={() => setStaffList(staffList.filter(x => x.id !== s.id))} className="text-slate-300 hover:text-red-500 transition-colors"><Icon name="Trash2" size={18}/></button>
+                                                <button onClick={() => setStaffList(staffList.filter(x => x.id !== s.id))} className="text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Icon name="Trash2" size={18}/></button>
                                             </div>
                                         );
                                     })}
@@ -403,93 +293,39 @@
                             </div>
                         )}
 
-                        {/* 3. Help */}
+                        {/* 3. Help Tab */}
                         {activeTab === 'help' && (
-                            <div className="space-y-6 animate-fadeIn">
-                                <div className="bg-yellow-50 p-5 rounded-xl border border-yellow-200">
-                                    <h3 className="font-bold text-yellow-800 mb-3 text-sm">派遣先店舗登録</h3>
-                                    <div className="flex gap-2">
-                                        <input type="text" value={newHelpStore} onChange={e => setNewHelpStore(e.target.value)} className="border p-3 rounded flex-1" placeholder="店舗名 (例: 渋谷店)"/>
-                                        <button onClick={addHelpStore} className="bg-yellow-600 text-white px-6 rounded-lg font-bold">登録</button>
+                            <div className="animate-fadeIn space-y-6">
+                                <div className="bg-teal-50 p-5 rounded-2xl border border-teal-100 shadow-sm">
+                                    <h3 className="font-bold text-teal-900 mb-4 flex items-center gap-2 text-sm"><Icon name="Truck"/> 他店ヘルプ設定</h3>
+                                    <div className="flex gap-2 mb-4">
+                                        <input type="text" value={newHelpStore} onChange={e => setNewHelpStore(e.target.value)} className="border p-2 rounded flex-1" placeholder="派遣先店舗名"/>
+                                        <button onClick={() => { if(newHelpStore) { setHelpStores([...helpStores, newHelpStore]); setNewHelpStore(''); } }} className="bg-teal-600 text-white px-4 py-2 rounded font-bold">登録</button>
                                     </div>
-                                    <div className="flex gap-2 mt-3 flex-wrap">
-                                        {helpStores.map(h => <span key={h} className="bg-white border-yellow-300 border text-yellow-800 px-3 py-1 rounded-full text-xs flex items-center gap-2">{h} <button onClick={() => setHelpStores(helpStores.filter(x => x !== h))} className="text-red-400">×</button></span>)}
+                                    <div className="flex gap-2 flex-wrap">
+                                        {helpStores.map((s, i) => <span key={i} className="bg-white border text-teal-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">{s} <button onClick={() => setHelpStores(helpStores.filter(x => x!==s))} className="text-red-400">×</button></span>)}
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto rounded-xl border">
-                                    <table className="w-full text-[11px] border-collapse">
-                                        <thead className="bg-slate-100">
-                                            <tr><th className="p-3 border-r w-32 sticky left-0 bg-slate-100">スタッフ</th>{dateList.map(d => <th key={d} className="p-2 border-r text-center">{d}</th>)}</tr>
-                                        </thead>
+                                    <table className="w-full text-[10px] border-collapse">
+                                        <thead><tr className="bg-slate-100">
+                                            <th className="sticky-name-col p-3 border-r">スタッフ(派遣元)</th>
+                                            {dateList.map(d => <th key={d} className="p-1 border-r text-center min-w-[35px]">{d}</th>)}
+                                        </tr></thead>
                                         <tbody>
                                             {staffList.filter(s => !['help_guest', 'event'].includes(s.role)).map(s => (
                                                 <tr key={s.id} className="border-t">
-                                                    <td className="p-3 border-r font-bold sticky left-0 bg-white">{s.name}</td>
-                                                    {dateList.map(d => (
-                                                        <td key={d} className="border-r p-0 h-10">
-                                                            <select value={helpAssignments[`${s.id}_${getDateKey(d)}`] || ''} onChange={e => handleHelpAssign(s.id, d, e.target.value)} className="w-full h-full text-center text-[10px] bg-transparent outline-none border-none">
-                                                                <option value="">-</option>
-                                                                {helpStores.map(h => <option key={h} value={h}>{h}</option>)}
-                                                            </select>
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 4. Conditions */}
-                        {activeTab === 'conditions' && (
-                            <div className="space-y-6 animate-fadeIn">
-                                <div className="grid md:grid-cols-2 gap-4">
-                                    <div className="bg-slate-100 p-4 rounded-xl border">
-                                        <h4 className="font-bold text-xs text-slate-500 mb-2">店舗イベントマスタ</h4>
-                                        <div className="flex gap-2">
-                                            <input type="text" value={newStoreEventName} onChange={e => setNewStoreEventName(e.target.value)} className="flex-1 p-2 text-sm rounded border" placeholder="イベント名"/>
-                                            <button onClick={addStoreEvent} className="bg-slate-700 text-white px-4 rounded text-xs font-bold">追加</button>
-                                        </div>
-                                        <div className="flex gap-2 mt-2 flex-wrap">
-                                            {storeEventTypes.map(e => <span key={e.id} className={`${e.color} px-2 py-1 rounded text-[10px]`}>{e.name}</span>)}
-                                        </div>
-                                    </div>
-                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                                        <h4 className="font-bold text-xs text-indigo-500 mb-2">スタッフ行事マスタ (会議・研修など)</h4>
-                                        <div className="flex gap-2">
-                                            <input type="text" value={newStaffEventName} onChange={e => setNewStaffEventName(e.target.value)} className="flex-1 p-2 text-sm rounded border" placeholder="行事名"/>
-                                            <button onClick={addStaffEvent} className="bg-indigo-600 text-white px-4 rounded text-xs font-bold">追加</button>
-                                        </div>
-                                        <div className="flex gap-2 mt-2 flex-wrap">
-                                            {staffEventTypes.map(e => <span key={e.id} className={`${e.color} px-2 py-1 rounded text-[10px]`}>{e.name}</span>)}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="overflow-x-auto rounded-xl border shadow-xl bg-white">
-                                    <table className="w-full text-[10px] border-collapse">
-                                        <thead className="bg-slate-50 border-b">
-                                            <tr><th className="p-3 border-r w-40 sticky left-0 bg-slate-50 z-10 font-bold">スタッフ / 日付</th>{dateList.map(d => <th key={d} className={`p-1 border-r text-center min-w-[35px] ${isWeekend(d) ? 'bg-orange-50 text-orange-600' : ''}`}>{d}<br/>{getWeekDay(d)}</th>)}</tr>
-                                            <tr className="bg-white"><th className="p-3 border-r sticky left-0 bg-white z-10 font-bold text-red-600">店舗イベント (クリック切替)</th>{dateList.map(d => {
-                                                const ev = storeEventTypes.find(e => e.id === dailyStoreEvents[getDateKey(d)]);
-                                                return <td key={d} onClick={() => toggleDailyStoreEvent(d)} className={`border-r p-2 cursor-pointer text-center hover:bg-red-50 ${ev ? ev.color + ' font-bold' : ''}`}>{ev ? 'EV' : ''}</td>;
-                                            })}</tr>
-                                        </thead>
-                                        <tbody>
-                                            {staffList.map(s => (
-                                                <tr key={s.id} className="border-t hover:bg-slate-50">
-                                                    <td className="p-3 border-r sticky left-0 bg-white z-10 font-bold">
-                                                        {s.name} <br/><span className="text-[8px] opacity-50">{ROLES[s.role.toUpperCase()]?.label}</span>
-                                                    </td>
+                                                    <td className="sticky-name-col font-bold p-3 border-r bg-white">{s.name}</td>
                                                     {dateList.map(d => {
-                                                        const req = requests[`${s.id}_${getDateKey(d)}`];
-                                                        const sEv = staffEventTypes.find(e => e.id === req);
-                                                        let content = "-"; let bg = "";
-                                                        if (req === 'off') { content = "希"; bg = "bg-slate-700 text-white"; }
-                                                        else if (req === 'paid') { content = "有"; bg = "bg-pink-400 text-white"; }
-                                                        else if (sEv) { content = sEv.name.substring(0,1); bg = sEv.color; }
-                                                        else if (['help_guest','event'].includes(s.role) && (req === 'guest_in' || req === 'event_in')) { content = "出"; bg = "bg-teal-500 text-white"; }
-                                                        return <td key={d} onClick={() => handleRequestChange(s.id, d, s.role)} className={`border-r text-center p-2 cursor-pointer transition-all ${bg}`}>{content}</td>;
+                                                        const key = `${s.id}_${getDateKey(d)}`;
+                                                        return (
+                                                            <td key={d} className="border-r p-0 h-10">
+                                                                <select value={helpAssignments[key] || ''} onChange={e => setHelpAssignments({ ...helpAssignments, [key]: e.target.value })} className={`w-full h-full text-center border-none outline-none focus:ring-0 ${helpAssignments[key] ? 'bg-teal-100 font-bold' : 'bg-transparent text-slate-300'}`}>
+                                                                    <option value="">-</option>
+                                                                    {helpStores.map(h => <option key={h} value={h}>{h}</option>)}
+                                                                </select>
+                                                            </td>
+                                                        );
                                                     })}
                                                 </tr>
                                             ))}
@@ -499,39 +335,120 @@
                             </div>
                         )}
 
-                        {/* 5. Result */}
-                        {activeTab === 'result' && (
-                            <div className="space-y-6 animate-fadeIn">
-                                <div className="flex justify-between items-center bg-white p-4 rounded-xl border">
-                                    <button onClick={generateShift} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-bold shadow-xl flex items-center gap-2 transform active:scale-95 transition-all"><Icon name="RefreshCw"/> シフト作成実行</button>
-                                    <div className="flex gap-2">
-                                        <button onClick={handleExcelExport} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-4 rounded-xl font-bold shadow-lg flex items-center gap-2"><Icon name="FileSpreadsheet"/> EXCEL出力</button>
+                        {/* 4. Conditions Tab */}
+                        {activeTab === 'conditions' && (
+                            <div className="animate-fadeIn space-y-6">
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm">
+                                        <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2 text-sm"><Icon name="Flag"/> 店舗イベント登録</h3>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={newStoreEventName} onChange={e => setNewStoreEventName(e.target.value)} className="border p-2 rounded flex-1" placeholder="感謝デーなど"/>
+                                            <button onClick={() => { if(newStoreEventName) { setStoreEventTypes([...storeEventTypes, { id: `sevt_${Date.now()}`, name: newStoreEventName, color: 'bg-red-600 text-white' }]); setNewStoreEventName(''); } }} className="bg-red-600 text-white px-4 py-2 rounded font-bold">追加</button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm">
+                                        <h3 className="font-bold text-indigo-900 mb-2 flex items-center gap-2 text-sm"><Icon name="Users"/> スタッフ行事登録</h3>
+                                        <div className="flex gap-2">
+                                            <input type="text" value={newStaffEventName} onChange={e => setNewStaffEventName(e.target.value)} className="border p-2 rounded flex-1" placeholder="会議・研修など"/>
+                                            <button onClick={() => { if(newStaffEventName) { setStaffEventTypes([...staffEventTypes, { id: `stevt_${Date.now()}`, name: newStaffEventName, color: 'bg-indigo-600 text-white' }]); setNewStaffEventName(''); } }} className="bg-indigo-600 text-white px-4 py-2 rounded font-bold">追加</button>
+                                        </div>
                                     </div>
                                 </div>
+                                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xl bg-white">
+                                    <table className="w-full text-[11px] border-collapse">
+                                        <thead className="sticky top-0 z-40 bg-slate-50 border-b">
+                                            <tr>
+                                                <th className="sticky-name-col font-bold bg-slate-100 text-slate-800">名前 / 日付</th>
+                                                {dateList.map(d => <th key={d} className={`p-2 border-r text-center min-w-[40px] ${isWeekend(d) ? 'bg-orange-50 text-orange-600' : ''}`}>{d}<br/>{getWeekDay(d)}</th>)}
+                                            </tr>
+                                            <tr className="bg-red-50 border-b">
+                                                <th className="sticky-name-col font-bold text-red-600 text-center">店舗イベント</th>
+                                                {dateList.map(d => {
+                                                    const key = getDateKey(d);
+                                                    const isEvt = isEventDay(d);
+                                                    return (
+                                                        <td key={d} onClick={() => setDailyStoreEvents(isEvt ? (() => { const n = { ...dailyStoreEvents }; delete n[key]; return n; })() : { ...dailyStoreEvents, [key]: 'evt' })} 
+                                                            className={`border-r p-2 cursor-pointer text-center font-bold hover:bg-red-100 transition-all ${isEvt ? 'bg-red-600 text-white' : 'text-red-200'}`}>{isEvt ? 'EV' : '・'}</td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {staffList.map(s => {
+                                                const rInfo = ROLES[s.role.toUpperCase()] || ROLES.CREW;
+                                                return (
+                                                    <tr key={s.id} className="border-b hover:bg-blue-50 transition-colors">
+                                                        <td className="sticky-name-col font-bold p-3 border-r bg-white">
+                                                            <div>{s.name}</div>
+                                                            <div className={`text-[8px] font-bold inline-block px-1 rounded ${rInfo.color}`}>{rInfo.label}</div>
+                                                        </td>
+                                                        {dateList.map(d => {
+                                                            const k = `${s.id}_${getDateKey(d)}`;
+                                                            const req = requests[k];
+                                                            const isGuest = s.role === 'help_guest' || s.role === 'event';
+                                                            let content = "-"; let bg = "";
+                                                            if (req === 'off') { content = "希"; bg = "bg-slate-600 text-white"; }
+                                                            else if (req === 'paid') { content = "有"; bg = "bg-pink-400 text-white"; }
+                                                            else if (isGuest && (req === 'event_in' || req === 'guest_in')) { content = "出"; bg = "bg-teal-500 text-white"; }
+                                                            
+                                                            return (
+                                                                <td key={d} onClick={() => {
+                                                                    const next = req === 'off' ? 'paid' : (req === 'paid' ? undefined : 'off');
+                                                                    setRequests({ ...requests, [k]: isGuest ? (req ? undefined : (s.role === 'event' ? 'event_in' : 'guest_in')) : next });
+                                                                }} className={`border-r text-center p-2 cursor-pointer select-none transition-all ${bg}`}>{content}</td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 5. Result Tab */}
+                        {activeTab === 'result' && (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div className="flex justify-between items-center bg-white p-4 rounded-xl border shadow-sm">
+                                    <button onClick={generateShift} className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-xl font-bold shadow-xl flex items-center gap-3 transform active:scale-95 transition-all"><Icon name="RefreshCw" size={20}/> シフト作成実行</button>
+                                    <button onClick={() => {
+                                        let html = `<table border="1"><thead><tr style="background:#333;color:white"><th>名前</th>${dateList.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
+                                        staffList.forEach(s => {
+                                            html += `<tr><td style="font-weight:bold">${s.name}</td>${dateList.map(d => `<td>${schedule[`${s.id}_${getDateKey(d)}`] || ''}</td>`).join('')}</tr>`;
+                                        });
+                                        html += `</tbody></table>`;
+                                        const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel' })); link.download = 'shift_maker_export.xls'; link.click();
+                                    }} className="bg-emerald-600 text-white px-6 py-4 rounded-xl font-bold flex items-center gap-2 shadow-lg"><Icon name="FileSpreadsheet" size={20}/> EXCEL出力</button>
+                                </div>
+                                
                                 {schedule && (
-                                    <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xl bg-white">
-                                        <table className="w-full text-[10px] border-collapse">
+                                    <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xl bg-white">
+                                        <table className="w-full text-[11px] border-collapse">
                                             <thead className="bg-slate-800 text-white">
-                                                <tr><th className="p-4 border-r sticky left-0 bg-slate-800 z-10 w-32 shadow-lg">名前</th>{dateList.map(d => <th key={d} className={`p-2 border-r text-center min-w-[40px] ${isWeekend(d) ? 'text-orange-300' : ''}`}>{d}<br/><span className="text-[8px] font-normal">{getWeekDay(d)}</span></th>)}<th className="p-2 text-center bg-slate-900 w-16">休日</th></tr>
+                                                <tr>
+                                                    <th className="sticky-name-col font-bold bg-slate-800 text-white shadow-lg p-4 z-40">名前</th>
+                                                    {dateList.map(d => <th key={d} className={`p-2 border-r text-center min-w-[45px] ${isWeekend(d) ? 'text-orange-300' : ''}`}>{d}<br/><span className="text-[9px] font-normal">{getWeekDay(d)}</span></th>)}
+                                                    <th className="p-2 text-center bg-slate-900 sticky right-0 z-30">休日</th>
+                                                </tr>
                                             </thead>
                                             <tbody>
                                                 {staffList.map(s => {
                                                     let offCount = 0;
                                                     dateList.forEach(d => { if(['公休','希望','有給','定休'].includes(schedule[`${s.id}_${getDateKey(d)}`])) offCount++; });
                                                     return (
-                                                        <tr key={s.id} className="border-b hover:bg-blue-50">
-                                                            <td className="p-3 border-r sticky left-0 bg-white z-10 font-bold">{s.name}</td>
+                                                        <tr key={s.id} className="border-b hover:bg-blue-50 transition-colors group">
+                                                            <td className="sticky-name-col font-bold p-3 border-r bg-white z-20 shadow-sm group-hover:bg-blue-50 transition-colors">{s.name}</td>
                                                             {dateList.map(d => {
                                                                 const val = schedule[`${s.id}_${getDateKey(d)}`];
                                                                 let cellClass = "p-2 border-r text-center ";
                                                                 if (val === '早') cellClass += "text-blue-600 font-bold bg-blue-50";
                                                                 else if (val === '遅') cellClass += "text-orange-600 font-bold bg-orange-50";
                                                                 else if (val === 'フル') cellClass += "text-purple-600 font-bold bg-purple-50";
-                                                                else if (['公休','希望','有給','定休'].includes(val)) cellClass += "text-slate-300 bg-slate-50";
-                                                                else if (val && val !== '-') cellClass += "bg-indigo-50 text-indigo-800 font-bold";
+                                                                else if (['公休','希望','有給','定休'].includes(val)) cellClass += "text-slate-200 bg-slate-50 font-normal";
                                                                 return <td key={d} className={cellClass}>{val}</td>;
                                                             })}
-                                                            <td className={`p-2 text-center font-bold ${offCount !== FIXED_OFF_DAYS && !['help_guest','event'].includes(s.role) ? 'text-red-500 bg-red-50' : 'text-green-600 bg-green-50'}`}>{offCount}</td>
+                                                            <td className={`p-2 text-center font-bold sticky right-0 bg-white border-l z-20 shadow-lg ${offCount !== FIXED_OFF_DAYS && !['help_guest','event'].includes(s.role) ? 'text-red-500 underline bg-red-50' : 'text-green-600'}`}>{offCount}</td>
                                                         </tr>
                                                     );
                                                 })}
